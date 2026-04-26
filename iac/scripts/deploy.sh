@@ -64,6 +64,27 @@ fi
 echo -e "${YELLOW}Synthesizing Terraform configuration...${NC}"
 npx cdktf synth
 
+# Ensure ECR exists to avoid "Chicken and Egg" failures during image push
+echo -e "${YELLOW}Ensuring ECR repository exists...${NC}"
+APP_NAME="${APP_NAME:-express-ts-app}"
+REPO_NAME="${TF_VAR_ecr_repository_name:-${APP_NAME}-${ENVIRONMENT}}"
+if aws ecr describe-repositories --repository-names "${REPO_NAME}" &>/dev/null; then
+    echo -e "${GREEN}ECR repository '${REPO_NAME}' already exists.${NC}"
+else
+    echo -e "${YELLOW}Creating ECR repository '${REPO_NAME}'...${NC}"
+    aws ecr create-repository --repository-name "${REPO_NAME}" \
+        --image-scanning-configuration scanOnPush=true \
+        --encryption-configuration encryptionType=AES256 > /dev/null
+fi
+
+# Try to import ECR into terraform state if it exists but is not tracked
+# This prevents "repository already exists" errors during cdktf deploy
+echo -e "${YELLOW}Synchronizing ECR state...${NC}"
+STACK_NAME="express-ts-app-${ENVIRONMENT}"
+STATE_FILE="cdktf.out/stacks/${STACK_NAME}/terraform.tfstate"
+# We run import inside the stack directory
+(cd "cdktf.out/stacks/${STACK_NAME}" && terraform import aws_ecr_repository.ecr-repo "${REPO_NAME}" 2>/dev/null || true)
+
 # Deploy
 echo -e "${YELLOW}Deploying infrastructure...${NC}"
 npx cdktf deploy --auto-approve
