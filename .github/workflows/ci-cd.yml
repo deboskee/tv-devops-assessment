@@ -32,9 +32,11 @@ on:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_NAME || 'express-ts-app' }}
-  ECS_CLUSTER: ${{ vars.ECS_CLUSTER_NAME || 'express-ts-cluster' }}
-  ECS_SERVICE: ${{ vars.ECS_SERVICE_NAME || 'express-ts-service' }}
+  APP_NAME: ${{ vars.APP_NAME || 'express-ts-app' }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_NAME || format('{0}-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER_NAME || format('{0}-cluster-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE_NAME || format('{0}-service-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
 
 jobs:
   # ===========================================================================
