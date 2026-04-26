@@ -1,0 +1,64 @@
+# =============================================================================
+# .dockerignore - Exclude unnecessary files from Docker build context
+# =============================================================================
+
+# Dependencies - installed fresh in container
+node_modules
+npm-debug.log*
+yarn-error.log*
+
+# Build outputs - rebuilt in container
+dist
+build
+*.tsbuildinfo
+
+# Development files
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test files
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+__tests__
+jest.config.*
+
+# Documentation
+*.md
+!README.md
+docs
+LICENSE
+
+# Docker files (not needed inside container)
+Dockerfile*
+docker-compose*.yml
+.docker
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Infrastructure
+iac
+terraform
+*.tf
+
+# Misc
+.editorconfig
+.eslintrc*
+.prettierrc*
+tsconfig.*.json

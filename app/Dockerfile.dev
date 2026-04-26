@@ -1,0 +1,21 @@
+# =============================================================================
+# Development Dockerfile with Hot-Reload
+# =============================================================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci && npm cache clean --force
+
+# Copy source (will be overridden by volume mount)
+COPY tsconfig.json ./
+COPY src ./src
+
+# Expose port
+EXPOSE 3000
+
+# Start development server with hot-reload
+CMD ["npm", "run", "dev"]
