@@ -83,7 +83,7 @@ echo -e "${YELLOW}Synchronizing ECR state...${NC}"
 STACK_NAME="express-ts-app-${ENVIRONMENT}"
 STATE_FILE="cdktf.out/stacks/${STACK_NAME}/terraform.tfstate"
 # We run import inside the stack directory
-(cd "cdktf.out/stacks/${STACK_NAME}" && terraform import aws_ecr_repository.ecr-repo "${REPO_NAME}" 2>/dev/null || true)
+(cd "cdktf.out/stacks/${STACK_NAME}" && terraform import aws_ecr_repository.ecr_repo "${REPO_NAME}" 2>/dev/null || true)
 
 # Deploy
 echo -e "${YELLOW}Deploying infrastructure...${NC}"

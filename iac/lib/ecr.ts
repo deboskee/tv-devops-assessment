@@ -39,6 +39,8 @@ export class EcrConstruct extends Construct {
       }
     });
 
+    repository.overrideLogicalId('ecr_repo');
+
     // Lifecycle policy to limit image count
     new EcrLifecyclePolicy(this, 'lifecycle', {
       repository: repository.name,

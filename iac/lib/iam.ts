@@ -25,7 +25,7 @@ export class IamConstruct extends Construct {
 
     // ECS Task Execution Role (for pulling images, pushing logs)
     const executionRole = new IamRole(this, 'execution-role', {
-      name: `${prefix}-ecs-execution-role`,
+      namePrefix: `${prefix}-ecs-exec-`,
       assumeRolePolicy: JSON.stringify({
         Version: '2012-10-17',
         Statement: [
@@ -90,7 +90,7 @@ export class IamConstruct extends Construct {
 
     // ECS Task Role (for application-level permissions)
     const taskRole = new IamRole(this, 'task-role', {
-      name: `${prefix}-ecs-task-role`,
+      namePrefix: `${prefix}-ecs-task-`,
       assumeRolePolicy: JSON.stringify({
         Version: '2012-10-17',
         Statement: [
