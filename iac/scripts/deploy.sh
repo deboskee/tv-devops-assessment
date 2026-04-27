@@ -36,6 +36,10 @@ fi
 # Set environment
 export TF_VAR_environment="${ENVIRONMENT}"
 
+# Enable Terraform provider caching to mitigate network issues
+export TF_PLUGIN_CACHE_DIR="$HOME/.terraform.d/plugin-cache"
+mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
 # Verify AWS credentials
 if ! aws sts get-caller-identity >/dev/null; then
     echo -e "${RED}Error: AWS credentials not configured or session expired.${NC}"
@@ -60,14 +64,26 @@ if [ ! -d "node_modules" ]; then
     npm ci
 fi
 
-# Synthesize Terraform configuration
+# Synthesize Terraform configuration to get the dynamic resource names
 echo -e "${YELLOW}Synthesizing Terraform configuration...${NC}"
 npx cdktf synth
 
+# Extract the dynamic ECR repository name from the synthesized JSON
+echo -e "${YELLOW}Extracting dynamic ECR repository name...${NC}"
+STACK_NAME="express-ts-app-${ENVIRONMENT}"
+JSON_FILE="cdktf.out/stacks/${STACK_NAME}/cdk.tf.json"
+
+if [ -f "${JSON_FILE}" ]; then
+    # Extract the name using jq. We look for the resource with logical ID 'ecr_repo'
+    REPO_NAME=$(jq -r '.resource.aws_ecr_repository.ecr_repo.name' "${JSON_FILE}")
+    echo "  Dynamic ECR Name: ${REPO_NAME}"
+else
+    echo -e "${RED}Error: Synthesized JSON not found at ${JSON_FILE}${NC}"
+    exit 1
+fi
+
 # Ensure ECR exists to avoid "Chicken and Egg" failures during image push
 echo -e "${YELLOW}Ensuring ECR repository exists...${NC}"
-APP_NAME="${APP_NAME:-express-ts-app}"
-REPO_NAME="${TF_VAR_ecr_repository_name:-${APP_NAME}-${ENVIRONMENT}}"
 if aws ecr describe-repositories --repository-names "${REPO_NAME}" &>/dev/null; then
     echo -e "${GREEN}ECR repository '${REPO_NAME}' already exists.${NC}"
 else

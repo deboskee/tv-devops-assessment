@@ -44,6 +44,10 @@ fi
 
 export TF_VAR_environment="${ENVIRONMENT}"
 
+# Enable Terraform provider caching to mitigate network issues
+export TF_PLUGIN_CACHE_DIR="$HOME/.terraform.d/plugin-cache"
+mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
 cd "${IAC_DIR}"
 
 echo -e "${YELLOW}Destroying infrastructure...${NC}"

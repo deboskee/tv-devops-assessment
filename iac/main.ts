@@ -58,7 +58,7 @@ class ExpressTsAppStack extends TerraformStack {
     // This ensures we stay within AWS limits for ALB/TargetGroup names without truncating CDKTF tokens.
     const basePrefix = `${config.appName}-${config.environment}`.substring(0, 24);
     const dynamicPrefix = `${basePrefix}-${suffix.result}`;
-    const ecrRepoName = `${config.appName}-${config.environment}`; // Keep ECR stable so Docker push knows where to go
+    const ecrRepoName = dynamicPrefix; // Now dynamic! Scripts must extract this from synth output before pushing.
 
     // ==========================================================================
     // Monitoring (Log Group created first for IAM)
