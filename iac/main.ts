@@ -124,7 +124,7 @@ class ExpressTsAppStack extends TerraformStack {
       iam.outputs.taskRoleArn,
       iam.outputs.executionRoleArn,
       `${ecr.outputs.repositoryUrl}:${config.ecs.imageTag}`,
-      monitoring.outputs.logGroupArn
+      monitoring.outputs.logGroupName
     );
 
     // ==========================================================================
