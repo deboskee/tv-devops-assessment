@@ -34,17 +34,51 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   APP_NAME: ${{ vars.APP_NAME || 'express-ts-app' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_NAME || format('{0}-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
-  ECS_CLUSTER: ${{ vars.ECS_CLUSTER_NAME || format('{0}-cluster-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
-  ECS_SERVICE: ${{ vars.ECS_SERVICE_NAME || format('{0}-service-{1}', vars.APP_NAME || 'express-ts-app', github.event.inputs.environment || 'dev') }}
 
 jobs:
+  # ===========================================================================
+  # Metadata Extraction (for dynamic resource names)
+  # ===========================================================================
+  metadata:
+    name: Extract Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      ecr_repository: ${{ steps.extract.outputs.ecr_repository }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: iac/package-lock.json
+
+      - name: Install CDKTF dependencies
+        working-directory: ./iac
+        run: npm ci
+
+      - name: Synthesize and Extract
+        id: extract
+        working-directory: ./iac
+        env:
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_aws_account_id: '000000000000' # Placeholder for synth
+        run: |
+          npx cdktf synth
+          REPO_NAME=$(jq -r '.resource.aws_ecr_repository.ecr_repo.name' cdktf.out/stacks/express-ts-app-${{ env.ENVIRONMENT }}/cdk.tf.json)
+          echo "ecr_repository=$REPO_NAME" >> $GITHUB_OUTPUT
+          echo "Detected ECR Repo: $REPO_NAME"
+
   # ===========================================================================
   # Build and Test
   # ===========================================================================
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+    needs: metadata
     
     steps:
       - name: Checkout code
@@ -79,12 +113,15 @@ jobs:
   docker:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
       image_uri: ${{ steps.build-push.outputs.image_uri }}
+
+    env:
+      ECR_REPOSITORY: ${{ needs.metadata.outputs.ecr_repository }}
 
     steps:
       - name: Checkout code
@@ -138,7 +175,7 @@ jobs:
       - name: Output image URI
         id: output-uri
         run: |
-          echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ needs.metadata.outputs.ecr_repository }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
   # ===========================================================================
   # Deploy Infrastructure with CDKTF
@@ -146,7 +183,7 @@ jobs:
   deploy:
     name: Deploy to AWS
     runs-on: ubuntu-latest
-    needs: docker
+    needs: [docker, metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     environment:
