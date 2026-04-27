@@ -15,6 +15,7 @@ on:
       - 'app/**'
       - 'iac/**'
       - '.github/workflows/**'
+  # PR trigger for pre-merge validation (PR merge will trigger the push workflow)
   pull_request:
     branches:
       - main
