@@ -21,17 +21,15 @@ class ExpressTsAppStack extends TerraformStack {
     super(scope, id);
 
     // ==========================================================================
-    // Remote Backend Configuration (Optional)
+    // Remote Backend Configuration
     // ==========================================================================
-    if (config.backend?.enabled) {
-      new S3Backend(this, {
-        bucket: config.backend.bucket,
-        key: config.backend.key,
-        region: config.aws.region,
-        dynamodbTable: config.backend.dynamodbTable,
-        encrypt: true
-      });
-    }
+    new S3Backend(this, {
+      bucket: config.backend.bucket,
+      key: `terraform.${config.environment}.tfstate`,
+      region: config.aws.region,
+      dynamodbTable: config.backend.dynamodbTable,
+      encrypt: true
+    });
 
     // ==========================================================================
     // AWS Provider
@@ -49,63 +47,38 @@ class ExpressTsAppStack extends TerraformStack {
     const monitoring = new MonitoringConstruct(this, 'monitoring', config);
 
     // ==========================================================================
-    // ECR Repository
-    // ==========================================================================
-    const ecr = new EcrConstruct(this, 'ecr', config);
-
-    // ==========================================================================
-    // VPC & Networking
+    // Networking
     // ==========================================================================
     const vpc = new VpcConstruct(this, 'vpc', config);
 
     // ==========================================================================
-    // IAM Roles
+    // Container Registry
     // ==========================================================================
-    const iam = new IamConstruct(
-      this,
-      'iam',
-      config,
-      ecr.outputs.repositoryArn,
-      monitoring.outputs.logGroupArn
-    );
+    const ecr = new EcrConstruct(this, 'ecr', config);
 
     // ==========================================================================
-    // Application Load Balancer
+    // IAM Roles & Policies
     // ==========================================================================
+    const iam = new IamConstruct(this, 'iam', config, ecr.outputs.repositoryArn, monitoring.outputs.logGroupArn);
+
+    // ==========================================================================
+    // Load Balancing
+    // ==========================================================================
+    const route53 = new Route53Construct(this, 'route53', config, '', ''); // Placeholder, updated later
+
     const alb = new AlbConstruct(
       this,
       'alb',
       config,
       vpc.outputs.vpcId,
       vpc.outputs.publicSubnetIds,
-      vpc.outputs.albSecurityGroupId
+      vpc.outputs.albSecurityGroupId,
+      route53.outputs.certificateArn
     );
 
     // ==========================================================================
-    // Route53 & HTTPS (if configured)
+    // Compute (ECS)
     // ==========================================================================
-    let route53: Route53Construct | undefined;
-    if (config.domain) {
-      route53 = new Route53Construct(
-        this,
-        'route53',
-        config,
-        alb.outputs.albDnsName,
-        alb.outputs.albZoneId
-      );
-
-      // If certificate is created, recreate ALB with HTTPS
-      if (route53.outputs.certificateArn) {
-        // Note: In a real scenario, you'd restructure this
-        // For now, we reference the certificate in outputs
-      }
-    }
-
-    // ==========================================================================
-    // ECS Cluster & Service
-    // ==========================================================================
-    const imageUri = `${ecr.outputs.repositoryUrl}:${config.ecs.imageTag}`;
-    
     const ecs = new EcsConstruct(
       this,
       'ecs',
@@ -115,9 +88,22 @@ class ExpressTsAppStack extends TerraformStack {
       alb.outputs.targetGroupArn,
       iam.outputs.taskRoleArn,
       iam.outputs.executionRoleArn,
-      imageUri,
-      monitoring.outputs.logGroupName
+      `${ecr.outputs.repositoryUrl}:${config.ecs.imageTag}`,
+      monitoring.outputs.logGroupArn
     );
+
+    // ==========================================================================
+    // DNS Update (Pointing to ALB)
+    // ==========================================================================
+    if (config.domain?.name) {
+      new Route53Construct(
+        this,
+        'route53-final',
+        config,
+        alb.outputs.albDnsName,
+        alb.outputs.albZoneId
+      );
+    }
 
     // ==========================================================================
     // CloudWatch Alarms & Dashboard
@@ -142,72 +128,27 @@ class ExpressTsAppStack extends TerraformStack {
     // ==========================================================================
     // Outputs
     // ==========================================================================
-    new TerraformOutput(this, 'alb_dns_name', {
-      value: alb.outputs.albDnsName,
-      description: 'Application Load Balancer DNS name'
+    new TerraformOutput(this, 'vpc_id', { value: vpc.outputs.vpcId });
+    new TerraformOutput(this, 'ecr_repository_url', { value: ecr.outputs.repositoryUrl });
+    new TerraformOutput(this, 'alb_dns_name', { value: alb.outputs.albDnsName });
+    new TerraformOutput(this, 'ecs_cluster_name', { value: ecs.outputs.clusterName });
+    new TerraformOutput(this, 'ecs_service_name', { value: ecs.outputs.serviceName });
+    new TerraformOutput(this, 'cloudwatch_log_group', { value: monitoring.outputs.logGroupArn });
+    new TerraformOutput(this, 'cloudwatch_dashboard', {
+      value: `https://${config.aws.region}.console.aws.amazon.com/cloudwatch/home?region=${config.aws.region}#dashboards:name=${config.appName}-${config.environment}-dashboard`
     });
 
-    new TerraformOutput(this, 'app_url', {
-      value: route53?.outputs.domainName
-        ? `https://${route53.outputs.domainName}`
-        : `http://${alb.outputs.albDnsName}`,
-      description: 'Application URL'
-    });
-
-    new TerraformOutput(this, 'health_check_url', {
-      value: route53?.outputs.domainName
-        ? `https://${route53.outputs.domainName}/health`
-        : `http://${alb.outputs.albDnsName}/health`,
-      description: 'Health check endpoint URL'
-    });
-
-    new TerraformOutput(this, 'ecr_repository_url', {
-      value: ecr.outputs.repositoryUrl,
-      description: 'ECR repository URL'
-    });
-
-    new TerraformOutput(this, 'ecs_cluster_name', {
-      value: ecs.outputs.clusterName,
-      description: 'ECS cluster name'
-    });
-
-    new TerraformOutput(this, 'ecs_service_name', {
-      value: ecs.outputs.serviceName,
-      description: 'ECS service name'
-    });
-
-    new TerraformOutput(this, 'vpc_id', {
-      value: vpc.outputs.vpcId,
-      description: 'VPC ID'
-    });
-
-    new TerraformOutput(this, 'cloudwatch_log_group', {
-      value: monitoring.outputs.logGroupName,
-      description: 'CloudWatch log group name'
-    });
-
-    if (monitoring.outputs.dashboardName) {
-      new TerraformOutput(this, 'cloudwatch_dashboard', {
-        value: `https://${config.aws.region}.console.aws.amazon.com/cloudwatch/home?region=${config.aws.region}#dashboards:name=${monitoring.outputs.dashboardName}`,
-        description: 'CloudWatch dashboard URL'
-      });
-    }
-
-    if (route53?.outputs.certificateArn) {
-      new TerraformOutput(this, 'certificate_arn', {
-        value: route53.outputs.certificateArn,
-        description: 'ACM certificate ARN'
-      });
-    }
+    const appUrl = config.domain?.name 
+      ? `https://${config.environment === 'prod' ? config.domain.name : `${config.environment}.${config.domain.name}`}`
+      : `http://${alb.outputs.albDnsName}`;
+    
+    new TerraformOutput(this, 'app_url', { value: appUrl });
+    new TerraformOutput(this, 'health_check_url', { value: `${appUrl}${config.ecs.healthCheckPath}` });
   }
 }
 
-// =============================================================================
-// Application Entry Point
-// =============================================================================
 const app = new App();
 const config = loadConfig();
 
 new ExpressTsAppStack(app, `express-ts-app-${config.environment}`, config);
-
 app.synth();
