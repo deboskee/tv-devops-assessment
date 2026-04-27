@@ -53,8 +53,11 @@ class ExpressTsAppStack extends TerraformStack {
       upper: false
     });
 
-    // Create a unique prefix for all resources
-    const dynamicPrefix = `${config.appName}-${config.environment}-${suffix.result}`;
+    // Create a unique prefix for all resources. 
+    // We truncate the static part to 24 chars to leave room for the 4-char suffix and '-tg' suffix (total 32).
+    // This ensures we stay within AWS limits for ALB/TargetGroup names without truncating CDKTF tokens.
+    const basePrefix = `${config.appName}-${config.environment}`.substring(0, 24);
+    const dynamicPrefix = `${basePrefix}-${suffix.result}`;
     const ecrRepoName = `${config.appName}-${config.environment}`; // Keep ECR stable so Docker push knows where to go
 
     // ==========================================================================

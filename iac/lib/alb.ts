@@ -36,7 +36,9 @@ export class AlbConstruct extends Construct {
     super(scope, id);
 
     const prefix = config.appName;
-    const albName = config.appName.substring(0, 32);
+    // We avoid .substring(0, 32) here because appName may contain CDKTF tokens (like the random suffix)
+    // Truncating a token string results in invalid Terraform configuration.
+    const albName = prefix;
 
     // Create ALB
     const alb = new Alb(this, 'alb', {
@@ -57,7 +59,7 @@ export class AlbConstruct extends Construct {
 
     // Target Group
     const targetGroup = new AlbTargetGroup(this, 'tg', {
-      name: `${prefix}-tg`.substring(0, 32),
+      name: `${prefix}-tg`, // Same here, avoid substring on tokens
       port: config.ecs.containerPort,
       protocol: 'HTTP',
       vpcId: vpcId,
