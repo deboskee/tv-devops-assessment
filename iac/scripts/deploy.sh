@@ -81,9 +81,24 @@ fi
 # This prevents "repository already exists" errors during cdktf deploy
 echo -e "${YELLOW}Synchronizing ECR state...${NC}"
 STACK_NAME="express-ts-app-${ENVIRONMENT}"
-STATE_FILE="cdktf.out/stacks/${STACK_NAME}/terraform.tfstate"
-# We run import inside the stack directory
-(cd "cdktf.out/stacks/${STACK_NAME}" && terraform import aws_ecr_repository.ecr_repo "${REPO_NAME}" 2>/dev/null || true)
+STACK_DIR="cdktf.out/stacks/${STACK_NAME}"
+
+if [ -d "${STACK_DIR}" ]; then
+    echo "  Checking if ECR '${REPO_NAME}' is tracked in state..."
+    (
+        cd "${STACK_DIR}"
+        # Initialize terraform in the synth directory to enable import
+        terraform init -no-color >/dev/null 2>&1
+        
+        # Check if already in state
+        if ! terraform state show aws_ecr_repository.ecr_repo >/dev/null 2>&1; then
+            echo "  Importing existing ECR repository into state..."
+            terraform import -no-color aws_ecr_repository.ecr_repo "${REPO_NAME}" >/dev/null 2>&1 || true
+        else
+            echo "  ECR repository is already tracked in state."
+        fi
+    )
+fi
 
 # Deploy
 echo -e "${YELLOW}Deploying infrastructure...${NC}"
