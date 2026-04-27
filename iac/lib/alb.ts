@@ -35,11 +35,12 @@ export class AlbConstruct extends Construct {
   ) {
     super(scope, id);
 
-    const prefix = `${config.appName}-${config.environment}`;
+    const prefix = config.appName;
+    const albName = config.appName.substring(0, 32);
 
     // Create ALB
     const alb = new Alb(this, 'alb', {
-      name: config.alb.name.substring(0, 32), // ALB name max 32 chars
+      name: albName,
       internal: config.alb.internal,
       loadBalancerType: 'application',
       securityGroups: [securityGroupId],
@@ -50,7 +51,7 @@ export class AlbConstruct extends Construct {
       dropInvalidHeaderFields: true,
       tags: {
         ...config.tags,
-        Name: config.alb.name
+        Name: prefix
       }
     });
 

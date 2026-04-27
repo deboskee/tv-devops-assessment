@@ -1,12 +1,12 @@
 // =============================================================================
 // Main CDKTF Application
 // =============================================================================
-// Orchestrates all infrastructure resources for the Express.js application
-// =============================================================================
 
 import { App, TerraformStack, TerraformOutput, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { RandomProvider } from '@cdktf/provider-random/lib/provider';
+import { StringResource } from '@cdktf/provider-random/lib/string-resource';
 import { loadConfig, AppConfig } from './config';
 import { VpcConstruct } from './lib/vpc';
 import { EcrConstruct } from './lib/ecr';
@@ -21,18 +21,7 @@ class ExpressTsAppStack extends TerraformStack {
     super(scope, id);
 
     // ==========================================================================
-    // Remote Backend Configuration
-    // ==========================================================================
-    new S3Backend(this, {
-      bucket: config.backend.bucket,
-      key: `terraform.${config.environment}.tfstate`,
-      region: config.aws.region,
-      dynamodbTable: config.backend.dynamodbTable,
-      encrypt: true
-    });
-
-    // ==========================================================================
-    // AWS Provider
+    // Providers
     // ==========================================================================
     new AwsProvider(this, 'aws', {
       region: config.aws.region,
@@ -41,39 +30,80 @@ class ExpressTsAppStack extends TerraformStack {
       }]
     });
 
+    new RandomProvider(this, 'random');
+
+    // ==========================================================================
+    // Remote Backend Configuration
+    // ==========================================================================
+    if (config.backend?.bucket) {
+      new S3Backend(this, {
+        bucket: config.backend.bucket,
+        key: `terraform.${config.environment}.tfstate`,
+        region: config.aws.region,
+        dynamodbTable: config.backend.dynamodbTable,
+        encrypt: true
+      });
+    }
+
+    // ==========================================================================
+    // Random Suffix for Dynamic Resources
+    // ==========================================================================
+    const suffix = new StringResource(this, 'suffix', {
+      length: 4,
+      special: false,
+      upper: false
+    });
+
+    // Create a unique prefix for all resources
+    const dynamicPrefix = `${config.appName}-${config.environment}-${suffix.result}`;
+    const ecrRepoName = `${config.appName}-${config.environment}`; // Keep ECR stable so Docker push knows where to go
+
     // ==========================================================================
     // Monitoring (Log Group created first for IAM)
     // ==========================================================================
-    const monitoring = new MonitoringConstruct(this, 'monitoring', config);
+    const monitoring = new MonitoringConstruct(this, 'monitoring', {
+      ...config,
+      appName: dynamicPrefix // Propagate dynamic name
+    });
 
     // ==========================================================================
-    // Networking
+    // Networking (VPC remains stable/static)
     // ==========================================================================
     const vpc = new VpcConstruct(this, 'vpc', config);
 
     // ==========================================================================
     // Container Registry
     // ==========================================================================
-    const ecr = new EcrConstruct(this, 'ecr', config);
+    const ecr = new EcrConstruct(this, 'ecr', {
+      ...config,
+      ecr: {
+        ...config.ecr,
+        repositoryName: ecrRepoName // We keep ECR name stable but handle it with self-healing
+      }
+    });
 
     // ==========================================================================
     // IAM Roles & Policies
     // ==========================================================================
-    const iam = new IamConstruct(this, 'iam', config, ecr.outputs.repositoryArn, monitoring.outputs.logGroupArn);
+    const iam = new IamConstruct(this, 'iam', {
+      ...config,
+      appName: dynamicPrefix
+    }, ecr.outputs.repositoryArn, monitoring.outputs.logGroupArn);
 
     // ==========================================================================
     // Load Balancing
     // ==========================================================================
-    const route53 = new Route53Construct(this, 'route53', config, '', ''); // Placeholder, updated later
-
     const alb = new AlbConstruct(
       this,
       'alb',
-      config,
+      {
+        ...config,
+        appName: dynamicPrefix
+      },
       vpc.outputs.vpcId,
       vpc.outputs.publicSubnetIds,
       vpc.outputs.albSecurityGroupId,
-      route53.outputs.certificateArn
+      '' // No SSL cert for now
     );
 
     // ==========================================================================
@@ -82,7 +112,10 @@ class ExpressTsAppStack extends TerraformStack {
     const ecs = new EcsConstruct(
       this,
       'ecs',
-      config,
+      {
+        ...config,
+        appName: dynamicPrefix
+      },
       vpc.outputs.privateSubnetIds,
       vpc.outputs.ecsSecurityGroupId,
       alb.outputs.targetGroupArn,
@@ -91,19 +124,6 @@ class ExpressTsAppStack extends TerraformStack {
       `${ecr.outputs.repositoryUrl}:${config.ecs.imageTag}`,
       monitoring.outputs.logGroupArn
     );
-
-    // ==========================================================================
-    // DNS Update (Pointing to ALB)
-    // ==========================================================================
-    if (config.domain?.name) {
-      new Route53Construct(
-        this,
-        'route53-final',
-        config,
-        alb.outputs.albDnsName,
-        alb.outputs.albZoneId
-      );
-    }
 
     // ==========================================================================
     // CloudWatch Alarms & Dashboard
@@ -134,16 +154,7 @@ class ExpressTsAppStack extends TerraformStack {
     new TerraformOutput(this, 'ecs_cluster_name', { value: ecs.outputs.clusterName });
     new TerraformOutput(this, 'ecs_service_name', { value: ecs.outputs.serviceName });
     new TerraformOutput(this, 'cloudwatch_log_group', { value: monitoring.outputs.logGroupArn });
-    new TerraformOutput(this, 'cloudwatch_dashboard', {
-      value: `https://${config.aws.region}.console.aws.amazon.com/cloudwatch/home?region=${config.aws.region}#dashboards:name=${config.appName}-${config.environment}-dashboard`
-    });
-
-    const appUrl = config.domain?.name 
-      ? `https://${config.environment === 'prod' ? config.domain.name : `${config.environment}.${config.domain.name}`}`
-      : `http://${alb.outputs.albDnsName}`;
-    
-    new TerraformOutput(this, 'app_url', { value: appUrl });
-    new TerraformOutput(this, 'health_check_url', { value: `${appUrl}${config.ecs.healthCheckPath}` });
+    new TerraformOutput(this, 'app_url', { value: `http://${alb.outputs.albDnsName}` });
   }
 }
 

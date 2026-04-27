@@ -25,7 +25,7 @@ export class MonitoringConstruct extends Construct {
   constructor(scope: Construct, id: string, config: AppConfig) {
     super(scope, id);
 
-    const prefix = `${config.appName}-${config.environment}`;
+    const prefix = config.appName;
 
     // CloudWatch Log Group
     const logGroup = new CloudwatchLogGroup(this, 'log-group', {
@@ -76,7 +76,7 @@ export class MonitoringConstruct extends Construct {
   ): void {
     if (!config.monitoring.enableAlarms || !this.outputs.alarmTopicArn) return;
 
-    const prefix = `${config.appName}-${config.environment}`;
+    const prefix = config.appName;
 
     // High CPU Alarm
     new CloudwatchMetricAlarm(this, 'high-cpu-alarm', {
@@ -191,7 +191,7 @@ export class MonitoringConstruct extends Construct {
   ): void {
     if (!config.monitoring.enableCloudWatch) return;
 
-    const prefix = `${config.appName}-${config.environment}`;
+    const prefix = config.appName;
 
     const dashboardBody = {
       widgets: [

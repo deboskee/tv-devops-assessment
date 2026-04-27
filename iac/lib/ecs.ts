@@ -37,11 +37,11 @@ export class EcsConstruct extends Construct {
   ) {
     super(scope, id);
 
-    const prefix = `${config.appName}-${config.environment}`;
+    const prefix = config.appName;
 
     // ECS Cluster with Container Insights
     const cluster = new EcsCluster(this, 'cluster', {
-      name: config.ecs.clusterName,
+      name: `${prefix}-cluster`,
       setting: [
         {
           name: 'containerInsights',
@@ -50,7 +50,7 @@ export class EcsConstruct extends Construct {
       ],
       tags: {
         ...config.tags,
-        Name: config.ecs.clusterName
+        Name: `${prefix}-cluster`
       }
     });
 
@@ -118,7 +118,7 @@ export class EcsConstruct extends Construct {
 
     // ECS Service
     const service = new EcsService(this, 'service', {
-      name: config.ecs.serviceName,
+      name: `${prefix}-service`,
       cluster: cluster.arn,
       taskDefinition: taskDefinition.arn,
       desiredCount: config.ecs.desiredCount,
@@ -152,7 +152,7 @@ export class EcsConstruct extends Construct {
       },
       tags: {
         ...config.tags,
-        Name: config.ecs.serviceName
+        Name: `${prefix}-service`
       }
     });
 
