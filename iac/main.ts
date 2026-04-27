@@ -14,7 +14,6 @@ import { IamConstruct } from './lib/iam';
 import { AlbConstruct } from './lib/alb';
 import { EcsConstruct } from './lib/ecs';
 import { MonitoringConstruct } from './lib/monitoring';
-import { Route53Construct } from './lib/route53';
 
 class ExpressTsAppStack extends TerraformStack {
   constructor(scope: Construct, id: string, config: AppConfig) {
